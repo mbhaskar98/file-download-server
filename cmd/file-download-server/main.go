@@ -1,7 +1,12 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
@@ -18,7 +23,23 @@ func init() {
 
 func main() {
 	flag.Parse()
-
 	s := &Server{}
-	s.Start(host, port, dir)
+	go func() {
+
+		s.Start(host, port, dir)
+	}()
+
+	// Register interrupt signal handler
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	// Wait for interrupt signal
+	<-stop
+
+	// Shutdown the server gracefully
+	log.Println("Shutting down server...")
+	if err := s.Shutdown(context.TODO()); err != nil {
+		log.Fatalf("Server shutdown error: %v", err)
+	}
+
+	log.Println("Server stopped.")
 }

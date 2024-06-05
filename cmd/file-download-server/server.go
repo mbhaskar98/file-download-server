@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,7 +13,6 @@ import (
 
 func handleFileDownload(dir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println(r.URL.Path)
 		// Extract file name from URL
 		fileName := strings.TrimPrefix(r.URL.Path, "/download-")
 		log.Println("Download ", fileName)
@@ -24,6 +24,7 @@ func handleFileDownload(dir string) http.HandlerFunc {
 		// Open the file
 		file, err := os.Open(filePath)
 		if err != nil {
+			log.Println("ERR: File not found")
 			http.Error(w, "File not found.", http.StatusNotFound)
 			return
 		}
@@ -46,9 +47,9 @@ func handleFileDownload(dir string) http.HandlerFunc {
 	}
 }
 
-
-
-type Server struct{}
+type Server struct {
+	server *http.Server
+}
 
 func (s *Server) Start(host string, port string, dir string) {
 	address := fmt.Sprintf("%s:%s", host, port)
@@ -56,12 +57,19 @@ func (s *Server) Start(host string, port string, dir string) {
 	log.Printf("Starting server on %s\n", address)
 
 	handler := &RegexpHandler{}
-	reg1, _ := regexp.Compile(`/download-.*(MB|GB|mb|gb).bin`)
+	reg1, _ := regexp.Compile(`/download-([0-9]+)(MB|GB|mb|gb)(.bin)*`)
 	handler.HandleFunc(reg1, handleFileDownload(dir))
 
-	if err := http.ListenAndServe(address, handler); err != nil {
-		log.Fatalf("could not start server: %s\n", err.Error())
+	s.server = &http.Server{
+		Addr:    address,
+		Handler: handler,
+	}
+	if err := s.server.ListenAndServe(); err != nil {
+		log.Fatalf("server err: %s\n", err.Error())
 	}
 
 }
-
+func (s *Server) Shutdown(ctx context.Context) error {
+	// Shutdown the server gracefully
+	return s.server.Shutdown(ctx)
+}
